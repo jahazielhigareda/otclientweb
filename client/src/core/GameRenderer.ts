@@ -160,6 +160,16 @@ export class GameRenderer {
             }
             this.ctx.strokeStyle = '#2a2a2a';
             this.ctx.strokeRect(screenX, screenY, TILE_SIZE, TILE_SIZE);
+
+            // Render stacked items (non-ground) on top of ground
+            if (tile.itemIds && dat) {
+                for (const itemId of tile.itemIds) {
+                    const stackItem = dat.getItem(itemId);
+                    if (stackItem) {
+                        this.drawItem(stackItem, screenX, screenY);
+                    }
+                }
+            }
         }
 
         const creatures = g_gameMap.getAllCreatures();
