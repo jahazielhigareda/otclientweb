@@ -44,12 +44,11 @@ export class GameRenderer {
 
     private updateVirtualCenterOffset(): void {
         if (this.canvas) {
-            const viewWidthTiles = Math.ceil(this.canvas.width / TILE_SIZE);
-            const viewHeightTiles = Math.ceil(this.canvas.height / TILE_SIZE);
-            const adjustedWidth = viewWidthTiles % 2 === 1 ? viewWidthTiles : viewWidthTiles + 1;
-            const adjustedHeight = viewHeightTiles % 2 === 1 ? viewHeightTiles : viewHeightTiles + 1;
-            this.virtualCenterOffset.x = ((adjustedWidth + 3) / 2 - 1);
-            this.virtualCenterOffset.y = ((adjustedHeight + 3) / 2 - 1);
+            const viewWidthTiles = Math.floor(this.canvas.width / TILE_SIZE);
+            const viewHeightTiles = Math.floor(this.canvas.height / TILE_SIZE);
+
+            this.virtualCenterOffset.x = Math.floor((viewWidthTiles + 3) / 2) - 1;
+            this.virtualCenterOffset.y = Math.floor((viewHeightTiles + 3) / 2) - 1;
         }
     }
 
@@ -197,11 +196,17 @@ export class GameRenderer {
             const viewHeight = Math.ceil(this.canvas.height / TILE_SIZE) + 6;
 
             const zOffset = z - player.z;
-            const centerX = player.x + zOffset;
-            const centerY = player.y + zOffset;
+            const centerX = player.x - zOffset;
+            const centerY = player.y - zOffset;
 
             const tiles = g_gameMap.getTilesInViewport(centerX, centerY, z, viewWidth, viewHeight);
             if (tiles.length === 0) continue;
+
+            // Sort tiles to render from top-left to bottom-right
+            tiles.sort((a, b) => {
+                if (a.position.y !== b.position.y) return a.position.y - b.position.y;
+                return a.position.x - b.position.x;
+            });
 
             const tileInfo = new Array(tiles.length);
             for (let i = 0; i < tiles.length; i++) {
@@ -226,7 +231,7 @@ export class GameRenderer {
                         const item = dat.getItem(thing.id);
                         if (item && (this.isGround(item) || this.isGroundBorder(item) || this.isOnBottom(item))) {
                             this.drawItem(item, info.coords.screenX, info.coords.screenY, elevation);
-                            if (item.flags & (1n << 25n)) { // IsElevation
+                            if (item.flags & (1n << BigInt(DatFlag.IsElevation))) { // IsElevation
                                 elevation = Math.min(elevation + item.elevation, 24);
                             }
                         }
@@ -240,7 +245,7 @@ export class GameRenderer {
                         const item = dat.getItem(thing.id);
                         if (item && this.isCommon(item)) {
                             this.drawItem(item, info.coords.screenX, info.coords.screenY, elevation);
-                            if (item.flags & (1n << 25n)) { // IsElevation
+                            if (item.flags & (1n << BigInt(DatFlag.IsElevation))) { // IsElevation
                                 elevation = Math.min(elevation + item.elevation, 24);
                             }
                         }
@@ -284,7 +289,7 @@ export class GameRenderer {
                         const item = dat.getItem(thing.id);
                         if (item && this.isOnTop(item)) {
                             this.drawItem(item, info.coords.screenX, info.coords.screenY, topElevation);
-                            if (item.flags & (1n << 25n)) { // IsElevation
+                            if (item.flags & (1n << BigInt(DatFlag.IsElevation))) { // IsElevation
                                 topElevation = Math.min(topElevation + item.elevation, 24);
                             }
                         }
@@ -295,9 +300,9 @@ export class GameRenderer {
     }
 
     private getScreenCoords(tile: TileData): { screenX: number; screenY: number } {
-        const screenX = (this.virtualCenterOffset.x + (tile.position.x - this.camera.x) - (this.camera.z - tile.position.z)) * TILE_SIZE;
-        const screenY = (this.virtualCenterOffset.y + (tile.position.y - this.camera.y) - (this.camera.z - tile.position.z)) * TILE_SIZE;
-        return { screenX, screenY };
+        const x = (this.virtualCenterOffset.x + (tile.position.x - this.camera.x) - (this.camera.z - tile.position.z)) * TILE_SIZE;
+        const y = (this.virtualCenterOffset.y + (tile.position.y - this.camera.y) - (this.camera.z - tile.position.z)) * TILE_SIZE;
+        return { screenX: x, screenY: y };
     }
 }
 
