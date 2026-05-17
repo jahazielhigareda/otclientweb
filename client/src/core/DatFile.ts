@@ -1,6 +1,6 @@
 export interface DatItem {
     tibiaId: number;
-    flags: number;
+    flags: bigint;
     speed: number;
     maxWriteChars: number;
     maxReadChars: number;
@@ -35,47 +35,47 @@ export enum DatCategory {
     Missile = 3,
 }
 
-const FLAG_GROUND = 1 << 0;
-const FLAG_GROUND_BORDER = 1 << 1;
-const FLAG_ON_BOTTOM = 1 << 2;
-const FLAG_ON_TOP = 1 << 3;
-const FLAG_CONTAINER = 1 << 4;
-const FLAG_STACKABLE = 1 << 5;
-const FLAG_FORCE_USE = 1 << 6;
-const FLAG_MULTI_USE = 1 << 7;
-const FLAG_WRITABLE = 1 << 8;
-const FLAG_WRITABLE_ONCE = 1 << 10;
-const FLAG_FLUID_CONTAINER = 1 << 11;
-const FLAG_SPLASH = 1 << 12;
-const FLAG_NOT_WALKABLE = 1 << 13;
-const FLAG_NOT_MOVEABLE = 1 << 14;
-const FLAG_BLOCK_PROJECTILE = 1 << 15;
-const FLAG_NOT_PATHABLE = 1 << 16;
-const FLAG_PICKUPABLE = 1 << 17;
-const FLAG_HANGABLE = 1 << 18;
-const FLAG_HOOK_SOUTH = 1 << 19;
-const FLAG_HOOK_EAST = 1 << 20;
-const FLAG_ROTATEABLE = 1 << 21;
-const FLAG_LIGHT = 1 << 22;
-const FLAG_DONT_HIDE = 1 << 23;
-const FLAG_TRANSLUCENT = 1 << 24;
-const FLAG_DISPLACEMENT = 1 << 25;
-const FLAG_ELEVATION = 1 << 26;
-const FLAG_LYING_CORPSE = 1 << 27;
-const FLAG_ANIMATE_ALWAYS = 1 << 28;
-const FLAG_MINIMAP_COLOR = 1 << 29;
-const FLAG_LENS_HELP = 1 << 30;
-const FLAG_FULL_GROUND = 1 << 31;
-const FLAG_LOOK = 1 << 32;
-const FLAG_CLOTH = 1 << 33;
-const FLAG_MARKET = 1 << 34;
-const FLAG_USABLE = 1 << 35;
-const FLAG_WRAPABLE = 1 << 36;
-const FLAG_UNWRAPABLE = 1 << 37;
-const FLAG_TOP_EFFECT = 1 << 43;
-const FLAG_AMMO = 1 << 47;
-const FLAG_FLOOR_CHANGE = 1 << 48;
-const FLAG_DUAL_WIELD = 1 << 49;
+export enum DatFlag {
+    IsGround = 0,
+    IsGroundBorder = 1,
+    IsOnBottom = 2,
+    IsOnTop = 3,
+    IsContainer = 4,
+    IsStackable = 5,
+    IsForceUse = 6,
+    IsMultiUse = 7,
+    IsWritable = 8,
+    IsWritableOnce = 9,
+    IsFluidContainer = 10,
+    IsSplash = 11,
+    IsNotWalkable = 12,
+    IsNotMoveable = 13,
+    IsBlockProjectile = 14,
+    IsNotPathable = 15,
+    IsPickupable = 16,
+    IsHangable = 17,
+    IsHookSouth = 18,
+    IsHookEast = 19,
+    IsRotateable = 20,
+    IsLight = 21,
+    IsDontHide = 22,
+    IsTranslucent = 23,
+    IsDisplacement = 24,
+    IsElevation = 25,
+    IsLyingCorpse = 26,
+    IsAnimateAlways = 27,
+    IsMinimapColor = 28,
+    IsLensHelp = 29,
+    IsFullGround = 30,
+    IsLook = 31,
+    IsCloth = 32,
+    IsMarket = 33,
+    IsUsable = 34,
+    IsWrapable = 35,
+    IsUnwrapable = 36,
+    IsTopEffect = 37,
+    // Add others if needed
+}
 
 type ByteReader = { getUint8: (offset: number) => number; getUint16: (offset: number, littleEndian: boolean) => number; getUint32: (offset: number, littleEndian: boolean) => number };
 
@@ -136,9 +136,9 @@ export class DatFile {
             getUint32: (o: number, le: boolean) => dv.getUint32(offset + o, le),
         });
 
-        const readItem = (tibiaId: number, isOutfit: boolean): DatItem => {
+        const readItem = (tibiaId: number, _isOutfit: boolean): DatItem => {
             const item: DatItem = {
-                tibiaId, flags: 0, speed: 0, maxWriteChars: 0, maxReadChars: 0,
+                tibiaId, flags: 0n, speed: 0, maxWriteChars: 0, maxReadChars: 0,
                 lightLevel: 0, lightColor: 0, offsetX: 0, offsetY: 0, elevation: 0,
                 minimapColor: 0, cloth: 0, category: 0, tradeAs: 0, showAs: 0,
                 name: '', restrictVocation: 0, requiredLevel: 0,
@@ -151,51 +151,51 @@ export class DatFile {
                 const attr = dv.getUint8(offset++);
 
                 switch (attr) {
-                    case 0: { item.flags |= FLAG_GROUND; item.speed = dv.getUint16(offset, true); offset += 2; break; }
-                    case 1: { item.flags |= FLAG_GROUND_BORDER; break; }
-                    case 2: { item.flags |= FLAG_ON_BOTTOM; break; }
-                    case 3: { item.flags |= FLAG_ON_TOP; break; }
-                    case 4: { item.flags |= FLAG_CONTAINER; break; }
-                    case 5: { item.flags |= FLAG_STACKABLE; break; }
-                    case 6: { item.flags |= FLAG_FORCE_USE; break; }
-                    case 7: { item.flags |= FLAG_MULTI_USE; break; }
-                    case 8: { item.flags |= FLAG_WRITABLE; item.maxWriteChars = dv.getUint16(offset, true); offset += 2; break; }
-                    case 9: { item.flags |= FLAG_WRITABLE_ONCE; item.maxReadChars = dv.getUint16(offset, true); offset += 2; break; }
-                    case 10: { item.flags |= FLAG_FLUID_CONTAINER; break; }
-                    case 11: { item.flags |= FLAG_SPLASH; break; }
-                    case 12: { item.flags |= FLAG_NOT_WALKABLE; break; }
-                    case 13: { item.flags |= FLAG_NOT_MOVEABLE; break; }
-                    case 14: { item.flags |= FLAG_BLOCK_PROJECTILE; break; }
-                    case 15: { item.flags |= FLAG_NOT_PATHABLE; break; }
-                    case 16: { item.flags |= FLAG_PICKUPABLE; break; }
-                    case 17: { item.flags |= FLAG_HANGABLE; break; }
-                    case 18: { item.flags |= FLAG_HOOK_SOUTH; break; }
-                    case 19: { item.flags |= FLAG_HOOK_EAST; break; }
-                    case 20: { item.flags |= FLAG_ROTATEABLE; break; }
+                    case 0: { item.flags |= (1n << BigInt(DatFlag.IsGround)); item.speed = dv.getUint16(offset, true); offset += 2; break; }
+                    case 1: { item.flags |= (1n << BigInt(DatFlag.IsGroundBorder)); break; }
+                    case 2: { item.flags |= (1n << BigInt(DatFlag.IsOnBottom)); break; }
+                    case 3: { item.flags |= (1n << BigInt(DatFlag.IsOnTop)); break; }
+                    case 4: { item.flags |= (1n << BigInt(DatFlag.IsContainer)); break; }
+                    case 5: { item.flags |= (1n << BigInt(DatFlag.IsStackable)); break; }
+                    case 6: { item.flags |= (1n << BigInt(DatFlag.IsForceUse)); break; }
+                    case 7: { item.flags |= (1n << BigInt(DatFlag.IsMultiUse)); break; }
+                    case 8: { item.flags |= (1n << BigInt(DatFlag.IsWritable)); item.maxWriteChars = dv.getUint16(offset, true); offset += 2; break; }
+                    case 9: { item.flags |= (1n << BigInt(DatFlag.IsWritableOnce)); item.maxReadChars = dv.getUint16(offset, true); offset += 2; break; }
+                    case 10: { item.flags |= (1n << BigInt(DatFlag.IsFluidContainer)); break; }
+                    case 11: { item.flags |= (1n << BigInt(DatFlag.IsSplash)); break; }
+                    case 12: { item.flags |= (1n << BigInt(DatFlag.IsNotWalkable)); break; }
+                    case 13: { item.flags |= (1n << BigInt(DatFlag.IsNotMoveable)); break; }
+                    case 14: { item.flags |= (1n << BigInt(DatFlag.IsBlockProjectile)); break; }
+                    case 15: { item.flags |= (1n << BigInt(DatFlag.IsNotPathable)); break; }
+                    case 16: { item.flags |= (1n << BigInt(DatFlag.IsPickupable)); break; }
+                    case 17: { item.flags |= (1n << BigInt(DatFlag.IsHangable)); break; }
+                    case 18: { item.flags |= (1n << BigInt(DatFlag.IsHookSouth)); break; }
+                    case 19: { item.flags |= (1n << BigInt(DatFlag.IsHookEast)); break; }
+                    case 20: { item.flags |= (1n << BigInt(DatFlag.IsRotateable)); break; }
                     case 21: {
-                        item.flags |= FLAG_LIGHT;
+                        item.flags |= (1n << BigInt(DatFlag.IsLight));
                         item.lightLevel = dv.getUint16(offset, true); offset += 2;
                         item.lightColor = dv.getUint16(offset, true); offset += 2;
                         break;
                     }
-                    case 22: { item.flags |= FLAG_DONT_HIDE; break; }
-                    case 23: { item.flags |= FLAG_TRANSLUCENT; break; }
+                    case 22: { item.flags |= (1n << BigInt(DatFlag.IsDontHide)); break; }
+                    case 23: { item.flags |= (1n << BigInt(DatFlag.IsTranslucent)); break; }
                     case 24: {
-                        item.flags |= FLAG_DISPLACEMENT;
+                        item.flags |= (1n << BigInt(DatFlag.IsDisplacement));
                         item.offsetX = dv.getUint16(offset, true); offset += 2;
                         item.offsetY = dv.getUint16(offset, true); offset += 2;
                         break;
                     }
-                    case 25: { item.flags |= FLAG_ELEVATION; item.elevation = dv.getUint16(offset, true); offset += 2; break; }
-                    case 26: { item.flags |= FLAG_LYING_CORPSE; break; }
-                    case 27: { item.flags |= FLAG_ANIMATE_ALWAYS; break; }
-                    case 28: { item.flags |= FLAG_MINIMAP_COLOR; item.minimapColor = dv.getUint16(offset, true); offset += 2; break; }
-                    case 29: { item.flags |= FLAG_LENS_HELP; break; }
-                    case 30: { item.flags |= FLAG_FULL_GROUND; break; }
-                    case 31: { item.flags |= FLAG_LOOK; break; }
-                    case 32: { item.flags |= FLAG_CLOTH; item.cloth = dv.getUint16(offset, true); offset += 2; break; }
+                    case 25: { item.flags |= (1n << BigInt(DatFlag.IsElevation)); item.elevation = dv.getUint16(offset, true); offset += 2; break; }
+                    case 26: { item.flags |= (1n << BigInt(DatFlag.IsLyingCorpse)); break; }
+                    case 27: { item.flags |= (1n << BigInt(DatFlag.IsAnimateAlways)); break; }
+                    case 28: { item.flags |= (1n << BigInt(DatFlag.IsMinimapColor)); item.minimapColor = dv.getUint16(offset, true); offset += 2; break; }
+                    case 29: { item.flags |= (1n << BigInt(DatFlag.IsLensHelp)); break; }
+                    case 30: { item.flags |= (1n << BigInt(DatFlag.IsFullGround)); break; }
+                    case 31: { item.flags |= (1n << BigInt(DatFlag.IsLook)); break; }
+                    case 32: { item.flags |= (1n << BigInt(DatFlag.IsCloth)); item.cloth = dv.getUint16(offset, true); offset += 2; break; }
                     case 33: {
-                        item.flags |= FLAG_MARKET;
+                        item.flags |= (1n << BigInt(DatFlag.IsMarket));
                         item.category = dv.getUint16(offset, true); offset += 2;
                         item.tradeAs = dv.getUint16(offset, true); offset += 2;
                         item.showAs = dv.getUint16(offset, true); offset += 2;
@@ -207,10 +207,10 @@ export class DatFile {
                         item.requiredLevel = dv.getUint16(offset, true); offset += 2;
                         break;
                     }
-                    case 34: { item.flags |= FLAG_USABLE; break; }
-                    case 35: { item.flags |= FLAG_WRAPABLE; break; }
-                    case 36: { item.flags |= FLAG_UNWRAPABLE; break; }
-                    case 37: { item.flags |= FLAG_TOP_EFFECT; break; }
+                    case 34: { item.flags |= (1n << BigInt(DatFlag.IsUsable)); break; }
+                    case 35: { item.flags |= (1n << BigInt(DatFlag.IsWrapable)); break; }
+                    case 36: { item.flags |= (1n << BigInt(DatFlag.IsUnwrapable)); break; }
+                    case 37: { item.flags |= (1n << BigInt(DatFlag.IsTopEffect)); break; }
                     case 255: {
                         const groupCount = idleAnim ? dv.getUint8(offset++) : 1;
                         for (let g = 0; g < groupCount; g++) {

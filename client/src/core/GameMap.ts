@@ -2,13 +2,17 @@ import type { TilePosition } from '../network/types';
 
 export interface TileData {
     position: TilePosition;
-    groundId?: number;
-    creatureId?: number;
-    creatureName?: string;
-    creatureHealthPercent?: number;
-    minimapColor?: number;
-    itemIds?: number[];
+    things: ThingData[];
+    creatureId?: number; // Shortcut to the creature on this tile
 }
+
+export type ThingData = {
+    type: 'item';
+    id: number;
+} | {
+    type: 'creature';
+    id: number;
+};
 
 export interface CreatureData {
     id: number;
@@ -44,12 +48,14 @@ export class GameMap {
         return GameMap.instance;
     }
 
-    setTile(x: number, y: number, z: number, data: Partial<TileData>): void {
+    setTile(x: number, y: number, z: number, things: ThingData[]): void {
         const key = this.key(x, y, z);
-        const existing = this.tiles.get(key) || { position: { x, y, z } };
-        Object.assign(existing, data);
-        existing.position = { x, y, z };
-        this.tiles.set(key, existing);
+        const creature = things.find(t => t.type === 'creature') as { type: 'creature', id: number } | undefined;
+        this.tiles.set(key, {
+            position: { x, y, z },
+            things,
+            creatureId: creature?.id
+        });
     }
 
     getTile(x: number, y: number, z: number): TileData | undefined {
@@ -74,7 +80,7 @@ export class GameMap {
             speed: 0,
             outfit,
         });
-        this.setTile(x, y, z, { creatureId: id, creatureName: name, creatureHealthPercent: healthPercent });
+        // Note: Tile update should be handled by ProtocolGame during tile parsing
     }
 
     updateCreatureOutfit(id: number, lookType: number, head: number, body: number, legs: number, feet: number, addons: number): void {
@@ -89,10 +95,11 @@ export class GameMap {
         if (creature) {
             const { x, y, z } = creature.position;
             const tile = this.getTile(x, y, z);
-            if (tile && tile.creatureId === id) {
-                tile.creatureId = undefined;
-                tile.creatureName = undefined;
-                tile.creatureHealthPercent = undefined;
+            if (tile) {
+                tile.things = tile.things.filter(t => !(t.type === 'creature' && t.id === id));
+                if (tile.creatureId === id) {
+                    tile.creatureId = undefined;
+                }
             }
         }
         this.creatures.delete(id);
@@ -102,19 +109,16 @@ export class GameMap {
         const creature = this.creatures.get(id);
         if (creature) {
             const oldTile = this.getTile(fromX, fromY, fromZ);
-            if (oldTile && oldTile.creatureId === id) {
-                oldTile.creatureId = undefined;
-                oldTile.creatureName = undefined;
-                oldTile.creatureHealthPercent = undefined;
+            if (oldTile) {
+                oldTile.things = oldTile.things.filter(t => !(t.type === 'creature' && t.id === id));
+                if (oldTile.creatureId === id) oldTile.creatureId = undefined;
             }
             creature.position = { x: toX, y: toY, z: toZ };
-            this.setTile(toX, toY, toZ, {
-                creatureId: id,
-                creatureName: creature.name,
-                creatureHealthPercent: creature.healthPercent,
-            });
-        } else {
-            this.setTile(toX, toY, toZ, { creatureId: id });
+            const newTile = this.getTile(toX, toY, toZ);
+            if (newTile) {
+                newTile.things.push({ type: 'creature', id });
+                newTile.creatureId = id;
+            }
         }
     }
 
@@ -122,9 +126,6 @@ export class GameMap {
         const creature = this.creatures.get(id);
         if (creature) {
             creature.healthPercent = healthPercent;
-            const { x, y, z } = creature.position;
-            const tile = this.getTile(x, y, z);
-            if (tile) tile.creatureHealthPercent = healthPercent;
         }
     }
 
