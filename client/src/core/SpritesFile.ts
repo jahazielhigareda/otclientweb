@@ -36,9 +36,9 @@ export class SpritesFile {
         const dv = this.dataView;
         let offset = address;
 
-        const red = dv.getUint8(offset++);
-        const green = dv.getUint8(offset++);
-        const blue = dv.getUint8(offset++);
+        const _red = dv.getUint8(offset++);
+        const _green = dv.getUint8(offset++);
+        const _blue = dv.getUint8(offset++);
 
         let remaining = dv.getUint16(offset, true);
         offset += 2;
@@ -81,7 +81,7 @@ export class SpritesFile {
         const dv = new DataView(buffer);
 
         let offset = 0;
-        const signature = dv.getUint32(offset, true);
+        const _signature = dv.getUint32(offset, true);
         offset += 4;
 
         let spriteCount: number;

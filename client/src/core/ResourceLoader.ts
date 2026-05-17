@@ -53,7 +53,7 @@ export class ResourceLoader {
                     const pct = Math.min(15, Math.round((received / total) * 15));
                     this.emit({ phase: 'fetch-dat', percent: pct, message: `Downloading Tibia.dat... ${received}/${total}` });
                 }
-                const blob = new Blob(chunks);
+                const blob = new Blob(chunks as any);
                 const buf = await blob.arrayBuffer();
                 this.emit({ phase: 'parse-dat', percent: 16, message: 'Parsing Tibia.dat...' });
                 this.dat = await DatFile.loadFromBuffer(buf, clientVersion);
@@ -82,7 +82,7 @@ export class ResourceLoader {
                     const pct = 21 + Math.round((received / sprTotal) * 74);
                     this.emit({ phase: 'fetch-spr', percent: pct, message: `Downloading Tibia.spr... ${received}/${sprTotal}` });
                 }
-                const blob = new Blob(chunks);
+                const blob = new Blob(chunks as any);
                 const buf = await blob.arrayBuffer();
                 this.emit({ phase: 'parse-spr', percent: 96, message: 'Parsing Tibia.spr...' });
                 this.sprites = await SpritesFile.loadFromBuffer(buf, clientVersion);

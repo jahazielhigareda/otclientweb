@@ -30,7 +30,7 @@ export class Connection {
 
     send(data: Uint8Array): void {
         if (!this.socket) return;
-        this.socket.send(data);
+        this.socket.send(data as any);
     }
 
     sendFramedPacket(data: Uint8Array): void {

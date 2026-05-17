@@ -134,7 +134,7 @@ export class ProtocolGame extends Protocol {
         packet.writeBytes(this.encryptRSA(padded));
         this.sendPacket(packet);
         this.encryptionEnabled = true; // server will encrypt all subsequent packets
-        const hex = (b: Uint8Array, n: number) => Array.from(b.slice(0,n)).map(x=>x.toString(16).padStart(2,'0')).join(' ');
+        const _hex = (b: Uint8Array, n: number) => Array.from(b.slice(0,n)).map(x=>x.toString(16).padStart(2,'0')).join(' ');
         console.log(`[ProtocolGame] EnterGame sent: account="${this.account}" char="${this.charName}" ts=${this.challengeTimestamp} rand=${this.challengeRandom} keys=[${Array.from(this.xteaKeys).map(k=>k.toString(16)).join(',')}]`);
     }
 
