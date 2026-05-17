@@ -10,7 +10,8 @@ export class GameRenderer {
     private static instance: GameRenderer;
     private canvas: HTMLCanvasElement | null = null;
     private ctx: CanvasRenderingContext2D | null = null;
-    private camera = { x: 0, y: 0 };
+    private camera = { x: 0, y: 0, z: 0 }; // Camera position in tile coordinates
+    private virtualCenterOffset = { x: 0, y: 0 }; // In tile units
     private spriteCanvasCache: Map<number, HTMLCanvasElement> = new Map();
 
     private constructor() {}
@@ -22,12 +23,38 @@ export class GameRenderer {
         return GameRenderer.instance;
     }
 
-    init(canvasId: string): void {
-        this.canvas = document.getElementById(canvasId) as HTMLCanvasElement;
+    init(canvas: HTMLCanvasElement): void {
+        this.canvas = canvas;
         if (this.canvas) {
+            console.log('[GameRenderer] Canvas initialized via reference');
             this.ctx = this.canvas.getContext('2d');
+            this.updateCanvasSize();
+            window.addEventListener('resize', () => this.updateCanvasSize());
+        }
+    }
+
+    private updateCanvasSize(): void {
+        if (this.canvas) {
             this.canvas.width = window.innerWidth;
             this.canvas.height = window.innerHeight;
+            this.updateVirtualCenterOffset();
+        }
+    }
+
+    private updateVirtualCenterOffset(): void {
+        if (this.canvas) {
+            // Calculate how many tiles fit in the canvas
+            const viewWidthTiles = Math.ceil(this.canvas.width / TILE_SIZE);
+            const viewHeightTiles = Math.ceil(this.canvas.height / TILE_SIZE);
+
+            // Ensure dimensions are odd (required for proper centering)
+            const adjustedWidth = viewWidthTiles % 2 === 1 ? viewWidthTiles : viewWidthTiles + 1;
+            const adjustedHeight = viewHeightTiles % 2 === 1 ? viewHeightTiles : viewHeightTiles + 1;
+
+            // OTClient: m_virtualCenterOffset = (drawDimension / 2 - Size(1)).toPoint();
+            // where drawDimension = visibleDimension + 3
+            this.virtualCenterOffset.x = ((adjustedWidth + 3) / 2 - 1);
+            this.virtualCenterOffset.y = ((adjustedHeight + 3) / 2 - 1);
         }
     }
 
@@ -36,7 +63,10 @@ export class GameRenderer {
             return this.spriteCanvasCache.get(spriteId)!;
         }
         const spr = g_resourceLoader.getSprites();
-        if (!spr) return null;
+        if (!spr) {
+            // console.error('[GameRenderer] SpritesFile not loaded!');
+            return null;
+        }
         const imgData = spr.getSprite(spriteId);
         if (!imgData) return null;
         const canvas = document.createElement('canvas');
@@ -49,35 +79,37 @@ export class GameRenderer {
     }
 
     private spriteIndex(item: DatItem, x: number, y: number, layer: number, px: number, py: number, pz: number, phase: number): number {
-        const { width, height, layers, patternX, patternY, patternZ } = item;
-        const stridePx = layers * height * width;
-        const stridePy = patternX * stridePx;
-        const stridePz = patternY * stridePy;
-
-        return phase * patternZ * stridePz
-            + pz * stridePz
-            + py * stridePy
-            + px * stridePx
-            + layer * height * width
-            + y * width
-            + x;
+        return ((((((phase % item.animationPhases)
+            * item.patternZ + pz)
+            * item.patternY + py)
+            * item.patternX + px)
+            * item.layers + layer)
+            * item.height + y)
+            * item.width + x;
     }
 
     private drawItem(item: DatItem, baseX: number, baseY: number): void {
-        const { width, height, layers, patternX, spriteIds } = item;
+        const { width, height, layers } = item;
         const adjustY = baseY - (height - 1) * TILE_SIZE;
 
         for (let layer = 0; layer < layers; layer++) {
             for (let y = 0; y < height; y++) {
                 for (let x = 0; x < width; x++) {
                     const idx = this.spriteIndex(item, x, y, layer, 0, 0, 0, 0);
-                    const sid = spriteIds[idx];
-                    if (!sid) continue;
+                    const sid = item.spriteIds[idx];
+                    if (!sid) {
+                        // Fallback: draw a small colored square to indicate a tile exists but has no sprite
+                        this.ctx!.fillStyle = '#555';
+                        this.ctx!.fillRect(Math.round(baseX + x * TILE_SIZE + item.offsetX), Math.round(adjustY + y * TILE_SIZE + item.offsetY), 2, 2);
+                        continue;
+                    }
                     const spriteCanvas = this.getSpriteCanvas(sid);
                     if (spriteCanvas) {
                         this.ctx!.drawImage(spriteCanvas,
-                            Math.round(baseX + x * TILE_SIZE),
-                            Math.round(adjustY + y * TILE_SIZE));
+                            Math.round(baseX + x * TILE_SIZE + item.offsetX),
+                            Math.round(adjustY + y * TILE_SIZE + item.offsetY));
+                    } else {
+                        // console.warn(`[GameRenderer] Sprite ${sid} not found`);
                     }
                 }
             }
@@ -107,8 +139,10 @@ export class GameRenderer {
                     const spriteCanvas = this.getSpriteCanvas(sid);
                     if (spriteCanvas) {
                         this.ctx!.drawImage(spriteCanvas,
-                            Math.round(baseX + x * TILE_SIZE),
-                            Math.round(adjustY + y * TILE_SIZE));
+                            Math.round(baseX + x * TILE_SIZE + outfitItem.offsetX),
+                            Math.round(adjustY + y * TILE_SIZE + outfitItem.offsetY));
+                    } else {
+                        // console.warn(`[GameRenderer] Outfit sprite ${sid} not found`);
                     }
                 }
             }
@@ -121,63 +155,125 @@ export class GameRenderer {
         const player = g_gameManager.player;
         const dat = g_resourceLoader.getDat();
 
-        this.camera.x = player.x * TILE_SIZE - this.canvas.width / 2;
-        this.camera.y = player.y * TILE_SIZE - this.canvas.height / 2;
+        // Update virtual center offset in case canvas size changed
+        this.updateVirtualCenterOffset();
 
-        this.ctx.fillStyle = '#000';
+        // Set camera to follow player (in tile coordinates)
+        this.camera.x = player.x;
+        this.camera.y = player.y;
+        this.camera.z = player.z;
+
+        // Clear screen
+        this.ctx.fillStyle = '#000000'; // Black background
         this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
-        const viewWidth = Math.ceil(this.canvas.width / TILE_SIZE) + 2;
-        const viewHeight = Math.ceil(this.canvas.height / TILE_SIZE) + 2;
+        // Debug: Draw player position
+        this.ctx.fillStyle = '#ff0000';
+        const playerScreenX = Math.round(this.virtualCenterOffset.x * TILE_SIZE);
+        const playerScreenY = Math.round(this.virtualCenterOffset.y * TILE_SIZE);
+        this.ctx.fillRect(playerScreenX, playerScreenY, TILE_SIZE, TILE_SIZE);
 
-        const tiles = g_gameMap.getTilesInViewport(player.x, player.y, player.z, viewWidth, viewHeight);
-        tiles.sort((a, b) => a.position.y - b.position.y);
+        // Calculate visible floor range based on OTClient logic
+        const SEA_FLOOR = 7; // Should come from config
+        const SURFACE_VIEW_RANGE = 7; // floors above sea level we can see
+        const UNDERGROUND_VIEW_RANGE = 2; // floors below we can see
 
-        for (const tile of tiles) {
-            const screenX = (tile.position.x * TILE_SIZE) - this.camera.x;
-            const screenY = (tile.position.y * TILE_SIZE) - this.camera.y;
+        let minZ, maxZ;
 
-            if (tile.groundId && dat) {
-                const item = dat.getItem(tile.groundId);
-                if (item) {
-                    this.drawItem(item, screenX, screenY);
-                    // Minimap color overlay (RGB565 → rgba)
-                    if (item.minimapColor > 0) {
-                        const mc = item.minimapColor;
-                        const mr = ((mc >> 11) & 0x1F) / 31;
-                        const mg = ((mc >> 5) & 0x3F) / 63;
-                        const mb = (mc & 0x1F) / 31;
-                        this.ctx!.fillStyle = `rgba(${Math.round(mr * 255)},${Math.round(mg * 255)},${Math.round(mb * 255)},0.25)`;
-                        this.ctx!.fillRect(screenX, screenY, TILE_SIZE, TILE_SIZE);
-                    }
-                } else {
-                    this.ctx.fillStyle = '#2a3a1a';
-                    this.ctx.fillRect(screenX, screenY, TILE_SIZE, TILE_SIZE);
-                }
-            } else {
-                this.ctx.fillStyle = '#1a1a1a';
-                this.ctx.fillRect(screenX, screenY, TILE_SIZE, TILE_SIZE);
+        if (player.z <= SEA_FLOOR) {
+            // Player is on surface or above
+            minZ = Math.max(0, player.z - SURFACE_VIEW_RANGE);
+            maxZ = SEA_FLOOR;
+        } else {
+            // Player is underground
+            minZ = SEA_FLOOR;
+            maxZ = Math.min(15, player.z + UNDERGROUND_VIEW_RANGE); // 15 is max floors
+        }
+
+        let totalRendered = 0;
+        let firstTileLog: string | null = null;
+
+        // Render from highest z (deepest floor) to lowest z (highest floor)
+        // So that surface tiles render on top of underground tiles
+        for (let z = maxZ; z >= minZ; z--) {
+            const viewWidth = Math.ceil(this.canvas.width / TILE_SIZE) + 2;
+            const viewHeight = Math.ceil(this.canvas.height / TILE_SIZE) + 2;
+
+            // Calculate center position for this floor, adjusted for z offset
+            // In OTClient's MapView::updateVisibleTiles(), they adjust the center position when getting tiles
+            const zOffset = z - player.z; // How many floors below the player
+            const centerX = player.x + zOffset;
+            const centerY = player.y + zOffset;
+
+            const tiles = g_gameMap.getTilesInViewport(centerX, centerY, z, viewWidth, viewHeight);
+            if (tiles.length === 0) continue;
+
+            // Sort by y coordinate for proper rendering order (top to bottom)
+            tiles.sort((a, b) => a.position.y - b.position.y);
+            totalRendered += tiles.length;
+
+            if (!firstTileLog) {
+                const first = tiles[0];
+                firstTileLog = `(${first.position.x},${first.position.y},${first.position.z}) groundId=${first.groundId}`;
             }
-            this.ctx.strokeStyle = '#2a2a2a';
-            this.ctx.strokeRect(screenX, screenY, TILE_SIZE, TILE_SIZE);
 
-            // Render stacked items (non-ground) on top of ground
-            if (tile.itemIds && dat) {
-                for (const itemId of tile.itemIds) {
-                    const stackItem = dat.getItem(itemId);
-                    if (stackItem) {
-                        this.drawItem(stackItem, screenX, screenY);
+            for (const tile of tiles) {
+                // OTClient transformPositionTo2D:
+                // screen_x = (virtualCenterOffset.x + (world_x - camera_x) - (camera_z - world_z)) * tileSize
+                // screen_y = (virtualCenterOffset.y + (world_y - camera_y) - (camera_z - world_z)) * tileSize
+                //
+                // Where:
+                // - virtualCenterOffset is in tile units
+                // - world_x, world_y, world_z, camera_x, camera_y, camera_z are in tile units
+                // - tileSize is pixels per tile
+
+                const screenX = (this.virtualCenterOffset.x + (tile.position.x - this.camera.x) - (this.camera.z - tile.position.z)) * TILE_SIZE;
+                const screenY = (this.virtualCenterOffset.y + (tile.position.y - this.camera.y) - (this.camera.z - tile.position.z)) * TILE_SIZE;
+
+                if (tile.groundId && dat) {
+                    const item = dat.getItem(tile.groundId);
+                    if (item) {
+                        this.drawItem(item, screenX, screenY);
+                        if (item.minimapColor > 0) {
+                            const mc = item.minimapColor;
+                            const mr = ((mc >> 11) & 0x1F) / 31;
+                            const mg = ((mc >> 5) & 0x3F) / 63;
+                            const mb = (mc & 0x1F) / 31;
+                            this.ctx!.fillStyle = `rgba(${Math.round(mr * 255)},${Math.round(mg * 255)},${Math.round(mb * 255)},0.25)`;
+                            this.ctx!.fillRect(screenX, screenY, TILE_SIZE, TILE_SIZE);
+                        }
+                    } else {
+                        this.ctx.fillStyle = '#2a3a1a';
+                        this.ctx.fillRect(screenX, screenY, TILE_SIZE, TILE_SIZE);
+                    }
+                }
+
+                if (tile.itemIds && dat) {
+                    for (const itemId of tile.itemIds) {
+                        const stackItem = dat.getItem(itemId);
+                        if (stackItem) {
+                            this.drawItem(stackItem, screenX, screenY);
+                        }
                     }
                 }
             }
+        }
+
+        if (totalRendered === 0) {
+            const totalTiles = g_gameMap.tileCount();
+            console.warn(`[GameRenderer] NO TILES IN VIEW! Player=(${player.x},${player.y},${player.z}), ` +
+                `viewSize=${viewWidth}x${viewHeight}, totalTilesInMap=${totalTiles}, ` +
+                `camera=(${this.camera.x},${this.camera.y},${this.camera.z})`);
+        } else if (firstTileLog) {
+            console.log(`[GameRenderer] ${totalRendered} tiles rendered across floors ${minZ}..${maxZ}. First: ${firstTileLog}`);
         }
 
         const creatures = g_gameMap.getAllCreatures();
         creatures.sort((a, b) => a.position.y - b.position.y);
 
         for (const creature of creatures) {
-            const screenX = (creature.position.x * TILE_SIZE) - this.camera.x;
-            const screenY = (creature.position.y * TILE_SIZE) - this.camera.y;
+            const screenX = (this.virtualCenterOffset.x + (creature.position.x - this.camera.x) - (this.camera.z - creature.position.z)) * TILE_SIZE;
+            const screenY = (this.virtualCenterOffset.y + (creature.position.y - this.camera.y) - (this.camera.z - creature.position.z)) * TILE_SIZE;
 
             if (creature.outfit && creature.outfit.lookType && dat) {
                 const outfitItem = dat.getOutfit(creature.outfit.lookType);
@@ -187,7 +283,6 @@ export class GameRenderer {
             }
 
             const cx = screenX + TILE_SIZE / 2;
-            const cy = screenY + TILE_SIZE / 2;
             this.ctx.fillStyle = '#ffffff';
             this.ctx.font = '10px sans-serif';
             this.ctx.textAlign = 'center';

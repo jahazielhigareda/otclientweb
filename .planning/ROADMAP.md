@@ -32,7 +32,7 @@ Plans:
 
 **Goal:** Fix sprite rendering pipeline so the game map displays correctly (tiles with proper ground sprites, creatures with correct outfits, no blue-tint/color corruption).
 
-**Plans:** 2/2 plans executed
+**Plans:** 2/2 plans complete
 
 **Requirements:**
 - RENDER-01: All tile sprites render with correct colors (no channel swap / blue tint)

@@ -149,6 +149,10 @@ export class GameMap {
         return result;
     }
 
+    tileCount(): number {
+        return this.tiles.size;
+    }
+
     clear(): void {
         this.tiles.clear();
         this.creatures.clear();

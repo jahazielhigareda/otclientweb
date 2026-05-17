@@ -1,0 +1,25 @@
+/* Game client global reset — overrides Vite's default index.css */
+
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* Remove the 1126px width cap that Vite scaffolds by default.
+   The game needs the full viewport. */
+#root {
+  width: 100%;
+  max-width: 100%;
+  height: 100%;
+  margin: 0;
+  border: none;
+  text-align: unset;
+  display: block;
+}

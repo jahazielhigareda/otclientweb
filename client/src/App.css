@@ -1,0 +1,519 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   OT Web Client — Design System
+   Aesthetic: Dark Medieval Glass
+   — Near-black backgrounds, warm gold accents, glassmorphism panels,
+     parchment text, noise grain overlay, expressive serif display type.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700;900&family=Crimson+Pro:ital,wght@0,300;0,400;0,600;1,300;1,400&display=swap');
+
+/* ── Tokens ─────────────────────────────────────────────────────────────── */
+:root {
+  /* backgrounds */
+  --bg-void:        #080706;
+  --bg-panel:       rgba(14, 11, 8, 0.92);
+  --bg-input:       rgba(0, 0, 0, 0.45);
+  --bg-input-focus: rgba(0, 0, 0, 0.65);
+  --bg-item:        rgba(255, 255, 255, 0.03);
+  --bg-item-hover:  rgba(212, 175, 55, 0.07);
+  --bg-item-sel:    rgba(212, 175, 55, 0.13);
+
+  /* gold palette */
+  --gold-bright:  #f0c040;
+  --gold:         #c9a227;
+  --gold-dim:     #8a6e1a;
+  --gold-muted:   rgba(201, 162, 39, 0.25);
+  --gold-border:  rgba(201, 162, 39, 0.35);
+  --gold-glow:    rgba(201, 162, 39, 0.15);
+
+  /* text */
+  --text-primary:   #e8dfc8;
+  --text-secondary: #9e9080;
+  --text-ink:       #c8bfa8;
+
+  /* semantic */
+  --error:          #e05555;
+  --error-bg:       rgba(224, 85, 85, 0.1);
+  --success:        #5ba85a;
+
+  /* geometry */
+  --panel-radius:  4px;
+  --input-radius:  3px;
+  --transition:    0.2s ease;
+
+  /* typography */
+  --font-display: 'Cinzel', Georgia, serif;
+  --font-body:    'Crimson Pro', Georgia, serif;
+}
+
+/* ── Reset ──────────────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  padding: 0;
+  background-color: var(--bg-void);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  font-size: 16px;
+  line-height: 1.5;
+  user-select: none;
+  overflow: hidden;
+}
+
+/* ── Grain texture overlay (pseudo-element on body) ─────────────────────── */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+  background-size: 200px 200px;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.6;
+}
+
+/* ── Full-viewport centering shell ──────────────────────────────────────── */
+.rpg-container {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100vw;
+  height: 100vh;
+  z-index: 1;
+  background:
+    radial-gradient(ellipse 60% 70% at 50% 50%, rgba(80, 55, 10, 0.18) 0%, transparent 70%),
+    var(--bg-void);
+}
+
+/* Ambient orb behind panel */
+.rpg-container::after {
+  content: '';
+  position: absolute;
+  width: 500px;
+  height: 500px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(140, 90, 10, 0.12) 0%, transparent 65%);
+  pointer-events: none;
+  animation: pulse-glow 6s ease-in-out infinite;
+}
+
+@keyframes pulse-glow {
+  0%, 100% { opacity: 0.6; transform: scale(1); }
+  50%       { opacity: 1;   transform: scale(1.08); }
+}
+
+/* ── Panel ──────────────────────────────────────────────────────────────── */
+.rpg-panel {
+  position: relative;
+  z-index: 2;
+  width: 380px;
+  background: var(--bg-panel);
+  border: 1px solid var(--gold-border);
+  border-radius: var(--panel-radius);
+  box-shadow:
+    0 0 0 1px rgba(0,0,0,0.8),
+    0 30px 80px rgba(0, 0, 0, 0.85),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 0 60px rgba(140, 90, 10, 0.08);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  overflow: hidden;
+  animation: panel-enter 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.rpg-panel--wide {
+  width: 460px;
+}
+
+@keyframes panel-enter {
+  from { opacity: 0; transform: translateY(16px) scale(0.98); }
+  to   { opacity: 1; transform: translateY(0)   scale(1); }
+}
+
+/* Top edge gold line */
+.rpg-panel::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--gold), transparent);
+  opacity: 0.8;
+}
+
+/* ── Header ─────────────────────────────────────────────────────────────── */
+.rpg-header {
+  padding: 2rem 2rem 1.5rem;
+  text-align: center;
+  border-bottom: 1px solid rgba(201, 162, 39, 0.15);
+  background: linear-gradient(180deg, rgba(201, 162, 39, 0.04) 0%, transparent 100%);
+}
+
+.rpg-server-name {
+  font-family: var(--font-display);
+  font-size: 1.75rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: var(--gold);
+  text-transform: uppercase;
+  margin: 0 0 0.2rem;
+  text-shadow: 0 0 30px rgba(201, 162, 39, 0.35);
+}
+
+.rpg-title {
+  font-family: var(--font-display);
+  font-size: 1.1rem;
+  font-weight: 400;
+  letter-spacing: 0.22em;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  margin: 0;
+}
+
+/* ── Form area ──────────────────────────────────────────────────────────── */
+.rpg-form-area {
+  padding: 1.5rem 1.75rem 1.75rem;
+}
+
+/* ── Input group ────────────────────────────────────────────────────────── */
+.rpg-input-group {
+  margin-bottom: 1rem;
+}
+
+.rpg-label {
+  display: block;
+  font-family: var(--font-display);
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  margin-bottom: 0.4rem;
+}
+
+.rpg-input {
+  width: 100%;
+  background: var(--bg-input);
+  border: 1px solid rgba(201, 162, 39, 0.2);
+  border-radius: var(--input-radius);
+  color: var(--text-primary);
+  padding: 0.6rem 0.8rem;
+  font-family: var(--font-body);
+  font-size: 1rem;
+  transition:
+    border-color var(--transition),
+    background   var(--transition),
+    box-shadow   var(--transition);
+  -webkit-appearance: none;
+}
+
+.rpg-input::placeholder {
+  color: var(--text-secondary);
+  opacity: 0.5;
+}
+
+.rpg-input:focus {
+  outline: none;
+  background: var(--bg-input-focus);
+  border-color: rgba(201, 162, 39, 0.5);
+  box-shadow: 0 0 0 3px rgba(201, 162, 39, 0.08), inset 0 1px 3px rgba(0,0,0,0.3);
+}
+
+.rpg-input:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* ── Button ─────────────────────────────────────────────────────────────── */
+.rpg-button {
+  width: 100%;
+  margin-top: 0.5rem;
+  padding: 0.7rem 1rem;
+  background: rgba(201, 162, 39, 0.1);
+  border: 1px solid var(--gold-border);
+  border-radius: var(--input-radius);
+  color: var(--gold);
+  font-family: var(--font-display);
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition:
+    background   var(--transition),
+    border-color var(--transition),
+    color        var(--transition),
+    box-shadow   var(--transition),
+    transform    0.1s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Shimmer on hover */
+.rpg-button::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.06) 50%, transparent 100%);
+  transform: translateX(-100%);
+  transition: transform 0.5s ease;
+}
+
+.rpg-button:hover:not(:disabled) {
+  background: rgba(201, 162, 39, 0.18);
+  border-color: rgba(201, 162, 39, 0.6);
+  color: var(--gold-bright);
+  box-shadow: 0 0 20px rgba(201, 162, 39, 0.12);
+}
+
+.rpg-button:hover:not(:disabled)::after {
+  transform: translateX(100%);
+}
+
+.rpg-button:active:not(:disabled) {
+  transform: scale(0.98);
+  background: rgba(201, 162, 39, 0.22);
+}
+
+.rpg-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ── Error box ──────────────────────────────────────────────────────────── */
+.rpg-error {
+  display: flex;
+  gap: 0.5rem;
+  align-items: flex-start;
+  background: var(--error-bg);
+  border: 1px solid rgba(224, 85, 85, 0.25);
+  border-radius: var(--input-radius);
+  padding: 0.6rem 0.75rem;
+  margin-bottom: 0.75rem;
+  font-family: var(--font-body);
+  font-size: 0.9rem;
+  color: #f09090;
+  line-height: 1.4;
+}
+
+.rpg-error-icon {
+  flex-shrink: 0;
+  margin-top: 1px;
+  opacity: 0.7;
+}
+
+/* ── Status bar (server ping indicator) ─────────────────────────────────── */
+.rpg-status {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  padding: 0.55rem 1.75rem 1rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.rpg-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.rpg-status-dot--online  { background: #5ba85a; box-shadow: 0 0 6px #5ba85a; }
+.rpg-status-dot--offline { background: var(--error); }
+.rpg-status-dot--checking {
+  background: var(--gold-dim);
+  animation: blink 1.2s ease-in-out infinite;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.3; }
+}
+
+.rpg-status-text {
+  font-family: var(--font-display);
+  font-size: 0.6rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+/* ── Divider ────────────────────────────────────────────────────────────── */
+.rpg-divider {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(201, 162, 39, 0.2), transparent);
+  margin: 0.75rem 0;
+}
+
+/* ── Character list ─────────────────────────────────────────────────────── */
+.rpg-char-list {
+  margin: 0.5rem 0 1rem;
+  border: 1px solid rgba(201, 162, 39, 0.15);
+  border-radius: var(--input-radius);
+  overflow: hidden;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.rpg-char-list::-webkit-scrollbar { width: 4px; }
+.rpg-char-list::-webkit-scrollbar-track { background: transparent; }
+.rpg-char-list::-webkit-scrollbar-thumb { background: var(--gold-dim); border-radius: 2px; }
+
+.rpg-char-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  cursor: pointer;
+  background: var(--bg-item);
+  transition: background var(--transition), border-left-color var(--transition);
+  border-left: 3px solid transparent;
+}
+
+.rpg-char-item:last-child { border-bottom: none; }
+
+.rpg-char-item:hover {
+  background: var(--bg-item-hover);
+}
+
+.rpg-char-item.selected {
+  background: var(--bg-item-sel);
+  border-left-color: var(--gold);
+}
+
+.rpg-char-name {
+  font-family: var(--font-display);
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  letter-spacing: 0.04em;
+}
+
+.rpg-char-item.selected .rpg-char-name {
+  color: var(--gold-bright);
+}
+
+.rpg-char-meta {
+  font-family: var(--font-body);
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  text-align: right;
+}
+
+.rpg-char-world {
+  display: block;
+  font-style: italic;
+}
+
+/* ── Premium badge ──────────────────────────────────────────────────────── */
+.rpg-premium {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-family: var(--font-display);
+  font-size: 0.6rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--gold-dim);
+  margin-bottom: 0.75rem;
+}
+
+/* ── Empty state ────────────────────────────────────────────────────────── */
+.rpg-empty {
+  padding: 2rem;
+  text-align: center;
+  font-family: var(--font-body);
+  font-style: italic;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+}
+
+/* ── Loading spinner ────────────────────────────────────────────────────── */
+.rpg-spinner {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border: 1.5px solid rgba(201, 162, 39, 0.3);
+  border-top-color: var(--gold);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  vertical-align: middle;
+  margin-right: 0.4rem;
+}
+
+/* ── Modal Overlay ──────────────────────────────────────────────────────── */
+.rpg-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: transparent; /* Sin fondo oscuro */
+  backdrop-filter: blur(2px); /* Desenfoque sutil */
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 9999;
+  animation: fade-in 0.2s ease-out;
+  cursor: wait;
+}
+
+.rpg-panel--disabled {
+  pointer-events: none;
+  filter: grayscale(0.5) brightness(0.7);
+  transition: filter 0.3s ease;
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.rpg-modal {
+  width: 320px;
+  animation: modal-enter 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes modal-enter {
+  from { opacity: 0; transform: scale(0.9); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+.rpg-modal-content {
+  padding: 2rem;
+  text-align: center;
+}
+
+.rpg-spinner-large {
+  width: 48px;
+  height: 48px;
+  border: 3px solid rgba(201, 162, 39, 0.15);
+  border-top-color: var(--gold);
+  border-radius: 50%;
+  margin: 0 auto 1.5rem;
+  animation: spin 0.8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  box-shadow: 0 0 20px rgba(201, 162, 39, 0.1);
+}
+
+.rpg-status-msg {
+  font-family: var(--font-display);
+  font-size: 0.9rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--text-primary);
+  margin-bottom: 2rem;
+}
+
+/* ── Secondary Button ───────────────────────────────────────────────────── */
+.rpg-button--secondary {
+  background: rgba(0, 0, 0, 0.3);
+  border-color: rgba(255, 255, 255, 0.1);
+  color: var(--text-secondary);
+}
+
+.rpg-button--secondary:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.3);
+  color: var(--text-primary);
+  box-shadow: 0 0 15px rgba(255, 255, 255, 0.05);
+}

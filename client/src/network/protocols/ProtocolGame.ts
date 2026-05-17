@@ -13,6 +13,9 @@ export class ProtocolGame extends Protocol {
     private xteaKeys: Uint32Array = new Uint32Array(4);
     private encryptionEnabled: boolean = false;
 
+    private awareWidth: number = 18;
+    private awareHeight: number = 14;
+
     prepareGame(account: string, password: string, charName: string): void {
         this.account = account;
         this.password = password;
@@ -22,13 +25,14 @@ export class ProtocolGame extends Protocol {
     // ── XTEA ───────────────────────────────────────────────────────────────
 
     private xteaEncrypt(data: Uint8Array): Uint8Array {
-        const padding = 8 - (data.length % 8);
+        const remainder = data.length % 8;
+        const padding = remainder === 0 ? 0 : 8 - remainder;
         const padded = new Uint8Array(data.length + padding);
         padded.set(data);
         const view = new DataView(padded.buffer);
         const k = this.xteaKeys;
         const delta = 0x9E3779B9;
-        for (let i = 0; i < data.length; i += 8) {
+        for (let i = 0; i < padded.length; i += 8) { // FIX: padded.length, not data.length
             let v0 = view.getUint32(i, true);
             let v1 = view.getUint32(i + 4, true);
             let sum = 0;
@@ -111,12 +115,11 @@ export class ProtocolGame extends Protocol {
     }
 
     private sendEnterGame(): void {
-        console.log(`[ProtocolGame] Sending EnterGame for character: ${this.charName}`);
         for (let i = 0; i < 4; i++) this.xteaKeys[i] = Math.floor(Math.random() * 0xFFFFFFFF);
         const packet = new Packet();
         packet.writeUint8(0x0A);
-        packet.writeUint16(1);
-        packet.writeUint16(860);
+        packet.writeUint16(2);   // OS: 2 = Windows (TFS expects 2, not 1)
+        packet.writeUint16(860); // client version
         const plain = new Packet();
         plain.writeUint8(0x00);
         for (let i = 0; i < 4; i++) plain.writeUint32(this.xteaKeys[i]);
@@ -130,10 +133,18 @@ export class ProtocolGame extends Protocol {
         padded.set(plain.getBinary());
         packet.writeBytes(this.encryptRSA(padded));
         this.sendPacket(packet);
-        this.encryptionEnabled = true;
+        this.encryptionEnabled = true; // server will encrypt all subsequent packets
+        const hex = (b: Uint8Array, n: number) => Array.from(b.slice(0,n)).map(x=>x.toString(16).padStart(2,'0')).join(' ');
+        console.log(`[ProtocolGame] EnterGame sent: account="${this.account}" char="${this.charName}" ts=${this.challengeTimestamp} rand=${this.challengeRandom} keys=[${Array.from(this.xteaKeys).map(k=>k.toString(16)).join(',')}]`);
     }
 
     // ── Outgoing helpers ───────────────────────────────────────────────────
+
+    sendEnterGameAck(): void {
+        const packet = new Packet();
+        packet.writeUint8(0x0F); // ClientEnterGame — sent in response to GameServerLoginOrPendingState (0x0A)
+        this.sendPacket(packet);
+    }
 
     sendPingBack(): void {
         const packet = new Packet();
@@ -186,6 +197,8 @@ export class ProtocolGame extends Protocol {
         const raw = new Uint8Array(data);
         if (raw.length < 2) return;
         const payload = raw.slice(2);
+        const firstBytes = Array.from(payload.slice(0, Math.min(8, payload.length))).map(b => b.toString(16).padStart(2,'0')).join(' ');
+        console.log(`[ProtocolGame] handlePacket: ${payload.length} bytes, enc=${this.encryptionEnabled}, first=${firstBytes}`);
 
         let opcodeRegion: Uint8Array;
 
@@ -194,6 +207,8 @@ export class ProtocolGame extends Protocol {
             const encryptedPart = payload.slice(4);
             if (encryptedPart.length < 8) return;
             const decrypted = this.xteaDecrypt(new Uint8Array(encryptedPart));
+            const decFirst = Array.from(decrypted.slice(0, Math.min(8, decrypted.length))).map(b => b.toString(16).padStart(2,'0')).join(' ');
+            console.log(`[ProtocolGame] Decrypted: ${decrypted.length} bytes, first=${decFirst}`);
             opcodeRegion = decrypted.slice(2);
         } else {
             if (payload.length <= 4) return;
@@ -202,24 +217,37 @@ export class ProtocolGame extends Protocol {
 
         if (opcodeRegion.length === 0) return;
         const packet = new Packet(opcodeRegion.buffer as ArrayBuffer, opcodeRegion.byteOffset, opcodeRegion.byteLength);
-        try {
-            this.processPacket(packet);
-        } catch (e) {
-            console.warn('[ProtocolGame] processPacket error:', e);
-        }
+        this.processPacket(packet);
     }
 
     private processPacket(packet: Packet): void {
         while (packet.canRead(1)) {
             const opCode = packet.readUint8();
+            console.log(`[Proto] opcode=0x${opCode.toString(16).padStart(2,'0')} (${opCode}), remaining=${packet.remainingHex(8)}`);
 
             switch (opCode) {
+                case 0x06: { // Pre-challenge marker — 1 byte payload, then Challenge follows in the same frame.
+                    // Server signals it is about to send a Challenge. The actual login response
+                    // (0x0A — ClientPendingGame) must wait for the Challenge that follows; sending
+                    // 0x0F here is the bug that caused MTOTS to drop the connection.
+                    if (packet.canRead(1)) packet.readUint8();
+                    console.log('[ProtocolGame] Pre-challenge marker (0x06) received');
+                    break;
+                }
+
                 case GameServerOpcodes.GameServerChallenge: {
                     if (!packet.canRead(5)) break;
                     this.challengeTimestamp = packet.readUint32();
                     this.challengeRandom = packet.readUint8();
                     console.log('[ProtocolGame] Challenge received, sending EnterGame...');
                     this.sendEnterGame();
+                    break;
+                }
+
+                case GameServerOpcodes.GameServerChangeMapAwareRange: {
+                    this.awareWidth = packet.readUint16();
+                    this.awareHeight = packet.readUint16();
+                    console.log(`[ProtocolGame] AwareRange changed: ${this.awareWidth}x${this.awareHeight}`);
                     break;
                 }
 
@@ -232,9 +260,7 @@ export class ProtocolGame extends Protocol {
                 }
 
                 case GameServerOpcodes.GameServerFullMap: {
-                    const { x, y, z, tileCount, creatureCount } = this.parseFullMap(packet);
-                    g_gameManager.setPosition(x, y, z);
-                    console.log(`[ProtocolGame] Map parsed: ${tileCount} tiles, ${creatureCount} creatures at (${x},${y},${z})`);
+                    this.parseFullMap(packet);
                     break;
                 }
 
@@ -356,18 +382,94 @@ export class ProtocolGame extends Protocol {
                     break;
                 }
 
+                case GameServerOpcodes.GameServerLoginOrPendingState: {
+                    const playerId = packet.readUint32();
+                    const _serverBeat = packet.readUint16();
+                    // 8.60: 1 trailing byte (canReportBugs). >=1054 and >=1058 features add more,
+                    // but they don't apply at this protocol version.
+                    if (packet.canRead(1)) packet.readUint8();
+                    g_gameManager.updatePlayer({ id: playerId });
+                    console.log(`[ProtocolGame] LoginOrPendingState (0x0A): PlayerID=${playerId} — sending ClientEnterGame (0x0F)`);
+                    this.sendEnterGameAck();
+                    break;
+                }
+
+                case GameServerOpcodes.GameServerEnterGame: {
+                    // 0x0F — some server builds send this after 0x0A, encrypted.
+                    // encryptionEnabled is already true from 0x0A handler above.
+                    console.log('[ProtocolGame] EnterGame (0x0F) confirmed');
+                    window.dispatchEvent(new CustomEvent('game_enter'));
+                    break;
+                }
+
+                case GameServerOpcodes.GameServerMapTopRow: {
+                    const z = packet.readUint8();
+                    const player = g_gameManager.player;
+                    let skip = 0;
+                    for (let x = player.x - 8; x <= player.x + 9; x++) {
+                        if (skip > 0) { skip--; continue; }
+                        const result = this.setTileDescription(packet, x, player.y - 7, z);
+                        skip = result.skip;
+                    }
+                    break;
+                }
+
+                case GameServerOpcodes.GameServerMapRightRow: {
+                    const z = packet.readUint8();
+                    const player = g_gameManager.player;
+                    let skip = 0;
+                    for (let y = player.y - 6; y <= player.y + 7; y++) {
+                        if (skip > 0) { skip--; continue; }
+                        const result = this.setTileDescription(packet, player.x + 10, y, z);
+                        skip = result.skip;
+                    }
+                    break;
+                }
+
+                case GameServerOpcodes.GameServerMapBottomRow: {
+                    const z = packet.readUint8();
+                    const player = g_gameManager.player;
+                    let skip = 0;
+                    for (let x = player.x - 8; x <= player.x + 9; x++) {
+                        if (skip > 0) { skip--; continue; }
+                        const result = this.setTileDescription(packet, x, player.y + 8, z);
+                        skip = result.skip;
+                    }
+                    break;
+                }
+
+                case GameServerOpcodes.GameServerMapLeftRow: {
+                    const z = packet.readUint8();
+                    const player = g_gameManager.player;
+                    let skip = 0;
+                    for (let y = player.y - 6; y <= player.y + 7; y++) {
+                        if (skip > 0) { skip--; continue; }
+                        const result = this.setTileDescription(packet, player.x - 9, y, z);
+                        skip = result.skip;
+                    }
+                    break;
+                }
+
                 case GameServerOpcodes.GameServerMoveCreature: {
-                    const fromX = packet.readUint16();
-                    const fromY = packet.readUint16();
-                    const fromZ = packet.readUint8();
+                    let creatureId: number;
+                    let fromX = 0, fromY = 0, fromZ = 0;
+                    const x = packet.readUint16();
+                    if (x === 0xFFFF) {
+                        creatureId = packet.readUint32();
+                    } else {
+                        fromX = x;
+                        fromY = packet.readUint16();
+                        fromZ = packet.readUint8();
+                        packet.readUint8(); // stackpos
+                        const tile = g_gameMap.getTile(fromX, fromY, fromZ);
+                        creatureId = tile?.creatureId || 0;
+                    }
                     const toX = packet.readUint16();
                     const toY = packet.readUint16();
                     const toZ = packet.readUint8();
-                    const creatureId = g_gameMap.getTile(fromX, fromY, fromZ)?.creatureId;
                     if (creatureId) {
                         g_gameMap.moveCreature(creatureId, fromX, fromY, fromZ, toX, toY, toZ);
                     }
-                    console.log(`[ProtocolGame] Move creature: (${fromX},${fromY},${fromZ}) -> (${toX},${toY},${toZ})`);
                     break;
                 }
 
@@ -395,7 +497,7 @@ export class ProtocolGame extends Protocol {
                     const utY = packet.readUint16();
                     const utZ = packet.readUint8();
                     console.log(`[ProtocolGame] Update tile at (${utX},${utY},${utZ})`);
-                    this.parseTileDescription(packet, utX, utY, utZ);
+                    this.setTileDescription(packet, utX, utY, utZ);
                     break;
                 }
 
@@ -441,77 +543,6 @@ export class ProtocolGame extends Protocol {
                 }
 
                 // ── 8.60 native opcodes ────────────────────────────────────
-                case 0x0A: {
-                    const playerId = packet.readUint32();
-                    const _serverBeat = packet.readUint16();
-                    g_gameManager.updatePlayer({ id: playerId });
-                    console.log(`[ProtocolGame] LoginSuccess (0x0A) PlayerID=${playerId} beat=${_serverBeat}`);
-                    break;
-                }
-
-                case 0x14: {
-                    const health = packet.readUint16();
-                    const maxHealth = packet.readUint16();
-                    const capacity = packet.readUint32();
-                    const experience = packet.readUint32();
-                    const level = packet.readUint16();
-                    const _levelPercent = packet.readUint8();
-                    const mana = packet.readUint16();
-                    const maxMana = packet.readUint16();
-                    const magicLevel = packet.readUint8();
-                    const _magicLevelPercent = packet.readUint8();
-                    const soul = packet.readUint8();
-                    const stamina = packet.readUint16();
-                    g_gameManager.updatePlayer({
-                        hp: health, maxHp: maxHealth, mana, maxMana, level,
-                        experience, capacity, soul, stamina, magicLevel,
-                    });
-                    console.log(`[ProtocolGame] PlayerData (0x14): HP=${health}/${maxHealth} MP=${mana}/${maxMana} Lv=${level}`);
-                    break;
-                }
-
-                case 0x15: {
-                    const skills: string[] = [];
-                    for (let i = 0; i < 7; i++) {
-                        const val = packet.readUint16();
-                        const pct = packet.readUint8();
-                        skills.push(`${val}(${pct}%)`);
-                    }
-                    console.log(`[ProtocolGame] Skills (0x15): ${skills.join(', ')}`);
-                    break;
-                }
-
-                case 0x16: {
-                    const state = packet.readUint8();
-                    console.log(`[ProtocolGame] PlayerState (0x16): 0x${state.toString(16)}`);
-                    break;
-                }
-
-                case 0x32: {
-                    const lightLevel = packet.readUint8();
-                    const lightColor = packet.readUint8();
-                    console.log(`[ProtocolGame] Light (0x32): level=${lightLevel} color=0x${lightColor.toString(16)}`);
-                    break;
-                }
-
-                case 0x35: {
-                    const coId = packet.readUint32();
-                    const coLook = packet.readUint16();
-                    const coHead = packet.readUint8();
-                    const coBody = packet.readUint8();
-                    const coLegs = packet.readUint8();
-                    const coFeet = packet.readUint8();
-                    const coAddons = packet.readUint8();
-                    g_gameMap.updateCreatureOutfit(coId, coLook, coHead, coBody, coLegs, coFeet, coAddons);
-                    console.log(`[ProtocolGame] CreatureOutfit (0x35): id=${coId}`);
-                    break;
-                }
-
-                case 0x1E: {
-                    console.log('[ProtocolGame] Ping (0x1E)');
-                    break;
-                }
-
                 case 0x00:
                 case 0x54: {
                     break;
@@ -530,54 +561,106 @@ export class ProtocolGame extends Protocol {
                 }
 
                 default:
-                    console.warn(`[ProtocolGame] Unhandled opcode 0x${opCode.toString(16)}, remaining: ${packet.remainingHex(32)}`);
-                    break;
+                    console.error(`[ProtocolGame] UNHANDLED opcode 0x${opCode.toString(16)} (${opCode}), remaining bytes: ${packet.remainingHex(48)}`);
+                    return; // can't safely skip unknown opcode, abort this packet
+                }
             }
         }
-    }
 
     private parseFullMap(packet: Packet): { x: number; y: number; z: number; tileCount: number; creatureCount: number } {
         const x = packet.readUint16();
         const y = packet.readUint16();
         const z = packet.readUint8();
+
+        // Set position FIRST so camera is correct even if parsing below partially fails
+        g_gameManager.setPosition(x, y, z);
+        console.log(`[ProtocolGame] FullMap: player at (${x},${y},${z}), awareRange=${this.awareWidth}x${this.awareHeight}`);
+
+        let skip = 0;
         let tileCount = 0;
         let creatureCount = 0;
 
-        for (let nz = 7; nz >= 0; nz--) {
-            for (let nx = 0; nx < 18; nx++) {
-                for (let ny = 0; ny < 14; ny++) {
-                    const wx = x - 8 + nx;
-                    const wy = y - 6 + ny;
-                    const result = this.parseTileDescription(packet, wx, wy, nz);
-                    if (result.thingCount > 0) tileCount++;
-                    creatureCount += result.creatureCount;
-                }
+        const startX = x - Math.floor(this.awareWidth / 2);
+        const startY = y - Math.floor(this.awareHeight / 2);
+        console.log(`[ProtocolGame] FullMap: tile origin (${startX},${startY}), size ${this.awareWidth}x${this.awareHeight}`);
+
+        if (z <= 7) {
+            // Surface: iterate from floor 7 down to 0 (otclient's convention).
+            // For each nz, the offset z - nz lets the displaced tiles end up at the
+            // correct world z. Tiles for the floor below the player (nz=7 when z=6)
+            // are stored at z=7 with x/y shifted by -1.
+            for (let nz = 7; nz >= 0; nz--) {
+                skip = this.setFloorDescription(packet, startX, startY, nz, this.awareWidth, this.awareHeight, z - nz, skip, (tc) => tileCount += tc, (cc) => creatureCount += cc);
+            }
+        } else {
+            // Underground: iterate z-2 to z+2
+            for (let nz = z - 2; nz <= z + 2; nz++) {
+                skip = this.setFloorDescription(packet, startX, startY, nz, this.awareWidth, this.awareHeight, z - nz, skip, (tc) => tileCount += tc, (cc) => creatureCount += cc);
             }
         }
+
+        console.log(`[ProtocolGame] FullMap parsed: ${tileCount} tiles with ground, ${creatureCount} creatures. Total tiles in map: ${g_gameMap.tileCount()}`);
+        const byZ = new Map<number, number>();
+        for (let zz = 0; zz <= 15; zz++) {
+            let n = 0;
+            for (let xx = x - 9; xx <= x + 9; xx++) {
+                for (let yy = y - 7; yy <= y + 7; yy++) {
+                    if (g_gameMap.getTile(xx, yy, zz)) n++;
+                }
+            }
+            if (n > 0) byZ.set(zz, n);
+        }
+        console.log(`[ProtocolGame] Tiles per z (near player ${x},${y}): ${Array.from(byZ.entries()).map(([z,n]) => `z${z}=${n}`).join(' ')}`);
+        window.dispatchEvent(new CustomEvent('map_loaded'));
 
         return { x, y, z, tileCount, creatureCount };
     }
 
-    private parseTileDescription(packet: Packet, tileX?: number, tileY?: number, tileZ?: number): { thingCount: number; creatureCount: number } {
+    private setFloorDescription(packet: Packet, x: number, y: number, z: number, 
+                                 width: number, height: number, offset: number, skip: number, 
+                                 onTile: (n: number) => void, onCreature: (n: number) => void): number {
+        for (let nx = 0; nx < width; nx++) {
+            for (let ny = 0; ny < height; ny++) {
+                if (skip > 0) {
+                    skip--;
+                    continue;
+                }
+                const result = this.setTileDescription(packet, x + nx + offset, y + ny + offset, z);
+                if (result.thingCount > 0) onTile(1);
+                onCreature(result.creatureCount);
+                if (result.skip > 0) {
+                    skip = result.skip;
+                }
+            }
+        }
+        return skip;
+    }
+
+    private setTileDescription(packet: Packet, tileX: number, tileY: number, tileZ: number): { thingCount: number; creatureCount: number; skip: number } {
         let thingCount = 0;
         let creatureCount = 0;
         let groundId: number | undefined;
         const itemIds: number[] = [];
-        while (true) {
+        let skipCount = 0;
+
+        for (let stackPos = 0; stackPos < 256; stackPos++) {
             if (!packet.canRead(2)) break;
             const inspect = packet.peekUint16();
+
             if (inspect >= 0xFF00) {
                 packet.readUint16();
-                break;
+                skipCount = inspect & 0x00FF;
+                break; // end of tile, commit what we have
             }
+
             const result = this.parseThing(packet);
             thingCount++;
             if (result.isCreature) {
                 creatureCount++;
-                if (tileX !== undefined && result.creatureId) {
+                if (result.creatureId) {
                     g_gameMap.addCreature(
                         result.creatureId, result.creatureName || '',
-                        tileX, tileY!, tileZ!,
+                        tileX, tileY, tileZ,
                         result.healthPct || 100, result.dir || 0,
                         result.lookType ? {
                             lookType: result.lookType, head: result.head || 0,
@@ -594,37 +677,87 @@ export class ProtocolGame extends Protocol {
                 }
             }
         }
-        if (tileX !== undefined) {
-            g_gameMap.setTile(tileX, tileY!, tileZ!, {
-                groundId: groundId || undefined,
+
+        // Only commit a tile if we actually read at least one thing; otherwise the
+        // server signaled an empty tile (peek >= 0xFF00 at stackPos 0) and we must
+        // not pollute the map with placeholder tiles.
+        if (thingCount > 0) {
+            g_gameMap.setTile(tileX, tileY, tileZ, {
+                groundId,
                 itemIds: itemIds.length > 0 ? itemIds : undefined,
             });
         }
-        return { thingCount, creatureCount };
+
+        return { thingCount, creatureCount, skip: skipCount };
     }
 
     private parseThing(packet: Packet): { isCreature: boolean; tibiaId?: number; creatureId?: number; creatureName?: string; healthPct?: number; dir?: number; lookType?: number; head?: number; body?: number; legs?: number; feet?: number; addons?: number } {
         const id = packet.readUint16();
-        if (id === 0x0061 || id === 0x0062 || id === 0x0063) {
-            packet.readUint32();
+
+        if (id === 0x0061) { // UnknownCreature — new creature the client hasn't seen before
+            try {
+                const _removeId = packet.readUint32(); // creature to remove from known list
+                const creatureId = packet.readUint32();
+                // NOTE: no creatureType byte in protocol 8.60
+                const name = packet.readString();
+                const healthPct = packet.readUint8();
+                const dir = packet.readUint8();
+                const lookType = packet.readUint16();
+                let head = 0, body = 0, legs = 0, feet = 0, addons = 0;
+                if (lookType !== 0) {
+                    head = packet.readUint8();
+                    body = packet.readUint8();
+                    legs = packet.readUint8();
+                    feet = packet.readUint8();
+                    addons = packet.readUint8();
+                    // NOTE: no mount field in protocol 8.60
+                } else {
+                    packet.readUint16(); // lookTypeEx (item on the ground representing creature)
+                }
+                packet.readUint8();  // light intensity
+                packet.readUint8();  // light color
+                packet.readUint16(); // speed
+                packet.readUint8();  // skull
+                packet.readUint8();  // shield/party
+                packet.readUint8();  // unpass (passable flag) — present in 8.60 (>=854)
+                return { isCreature: true, creatureId, creatureName: name, healthPct, dir, lookType, head, body, legs, feet, addons };
+            } catch (e) {
+                console.warn(`[ProtocolGame] Failed to parse UnknownCreature:`, e);
+                return { isCreature: false, tibiaId: id };
+            }
+        }
+
+        if (id === 0x0062) { // OutdatedCreature — creature the client knows, resend outfit
             const creatureId = packet.readUint32();
-            const name = packet.readString();
             const healthPct = packet.readUint8();
             const dir = packet.readUint8();
             const lookType = packet.readUint16();
-            const head = packet.readUint8();
-            const body = packet.readUint8();
-            const legs = packet.readUint8();
-            const feet = packet.readUint8();
-            const addons = packet.readUint8();
-            packet.readUint8();
-            packet.readUint8();
-            packet.readUint16();
-            packet.readUint8();
-            packet.readUint8();
-            console.log(`[ProtocolGame] Thing: Creature ${name} id=${creatureId} hp=${healthPct}% at lookType=${lookType}`);
-            return { isCreature: true, creatureId, creatureName: name, healthPct, dir, lookType, head, body, legs, feet, addons };
+            let head = 0, body = 0, legs = 0, feet = 0, addons = 0;
+            if (lookType !== 0) {
+                head = packet.readUint8();
+                body = packet.readUint8();
+                legs = packet.readUint8();
+                feet = packet.readUint8();
+                addons = packet.readUint8();
+                // NOTE: no mount field in protocol 8.60
+            } else {
+                packet.readUint16(); // lookTypeEx
+            }
+            packet.readUint8();  // light intensity
+            packet.readUint8();  // light color
+            packet.readUint16(); // speed
+            packet.readUint8();  // skull
+            packet.readUint8();  // shield/party
+            packet.readUint8();  // unpass
+            return { isCreature: true, creatureId, healthPct, dir, lookType, head, body, legs, feet, addons };
         }
+
+        if (id === 0x0063) { // Creature — known creature, only direction update
+            const creatureId = packet.readUint32();
+            const dir = packet.readUint8(); // direction update
+            return { isCreature: true, creatureId, dir };
+        }
+
         return { isCreature: false, tibiaId: id };
     }
 }
