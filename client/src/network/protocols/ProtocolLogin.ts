@@ -142,7 +142,7 @@ export class ProtocolLogin extends Protocol {
     }
 
     private processPacket(data: Uint8Array): void {
-        const packet = new Packet(data.buffer, data.byteOffset, data.byteLength);
+        const packet = new Packet(data.buffer as any, data.byteOffset, data.byteLength);
         
         while (packet.getOffset() < data.length) {
             const opCode = packet.readUint8();
@@ -164,7 +164,7 @@ export class ProtocolLogin extends Protocol {
 
                 case LoginServerOpts.LoginServerCharacterList:
                     const charCount = packet.readUint8();
-                    const chars = [];
+                    const chars: any[] = [];
                     for (let i = 0; i < charCount; i++) {
                         const name = packet.readString();
                         const world = packet.readString();

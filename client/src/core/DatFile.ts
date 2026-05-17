@@ -28,54 +28,57 @@ export interface DatItem {
     spriteIds: number[];
 }
 
-export enum DatCategory {
-    Item = 0,
-    Outfit = 1,
-    Effect = 2,
-    Missile = 3,
-}
+export const DatCategory = {
+    Item: 0,
+    Outfit: 1,
+    Effect: 2,
+    Missile: 3,
+} as const;
+export type DatCategory = typeof DatCategory[keyof typeof DatCategory];
 
-export enum DatFlag {
-    IsGround = 0,
-    IsGroundBorder = 1,
-    IsOnBottom = 2,
-    IsOnTop = 3,
-    IsContainer = 4,
-    IsStackable = 5,
-    IsForceUse = 6,
-    IsMultiUse = 7,
-    IsWritable = 8,
-    IsWritableOnce = 9,
-    IsFluidContainer = 10,
-    IsSplash = 11,
-    IsNotWalkable = 12,
-    IsNotMoveable = 13,
-    IsBlockProjectile = 14,
-    IsNotPathable = 15,
-    IsPickupable = 16,
-    IsHangable = 17,
-    IsHookSouth = 18,
-    IsHookEast = 19,
-    IsRotateable = 20,
-    IsLight = 21,
-    IsDontHide = 22,
-    IsTranslucent = 23,
-    IsDisplacement = 24,
-    IsElevation = 25,
-    IsLyingCorpse = 26,
-    IsAnimateAlways = 27,
-    IsMinimapColor = 28,
-    IsLensHelp = 29,
-    IsFullGround = 30,
-    IsLook = 31,
-    IsCloth = 32,
-    IsMarket = 33,
-    IsUsable = 34,
-    IsWrapable = 35,
-    IsUnwrapable = 36,
-    IsTopEffect = 37,
-    // Add others if needed
-}
+
+export const DatFlag = {
+    IsGround: 0,
+    IsGroundBorder: 1,
+    IsOnBottom: 2,
+    IsOnTop: 3,
+    IsContainer: 4,
+    IsStackable: 5,
+    IsForceUse: 6,
+    IsMultiUse: 7,
+    IsWritable: 8,
+    IsWritableOnce: 9,
+    IsFluidContainer: 10,
+    IsSplash: 11,
+    IsNotWalkable: 12,
+    IsNotMoveable: 13,
+    IsBlockProjectile: 14,
+    IsNotPathable: 15,
+    IsPickupable: 16,
+    IsHangable: 17,
+    IsHookSouth: 18,
+    IsHookEast: 19,
+    IsRotateable: 20,
+    IsLight: 21,
+    IsDontHide: 22,
+    IsTranslucent: 23,
+    IsDisplacement: 24,
+    IsElevation: 25,
+    IsLyingCorpse: 26,
+    IsAnimateAlways: 27,
+    IsMinimapColor: 28,
+    IsLensHelp: 29,
+    IsFullGround: 30,
+    IsLook: 31,
+    IsCloth: 32,
+    IsMarket: 33,
+    IsUsable: 34,
+    IsWrapable: 35,
+    IsUnwrapable: 36,
+    IsTopEffect: 37,
+} as const;
+export type DatFlag = typeof DatFlag[keyof typeof DatFlag];
+
 
 type ByteReader = { getUint8: (offset: number) => number; getUint16: (offset: number, littleEndian: boolean) => number; getUint32: (offset: number, littleEndian: boolean) => number };
 
@@ -85,6 +88,10 @@ export class DatFile {
     private outfits: DatItem[];
     private effects: DatItem[];
     private missiles: DatItem[];
+    private itemMap: Map<number, DatItem> = new Map();
+    private outfitMap: Map<number, DatItem> = new Map();
+    private effectMap: Map<number, DatItem> = new Map();
+    private missileMap: Map<number, DatItem> = new Map();
 
     private constructor(signature: number, items: DatItem[], outfits: DatItem[], effects: DatItem[], missiles: DatItem[]) {
         this.signature = signature;
@@ -92,6 +99,10 @@ export class DatFile {
         this.outfits = outfits;
         this.effects = effects;
         this.missiles = missiles;
+        items.forEach(it => this.itemMap.set(it.tibiaId, it));
+        outfits.forEach(it => this.outfitMap.set(it.tibiaId, it));
+        effects.forEach(it => this.effectMap.set(it.tibiaId, it));
+        missiles.forEach(it => this.missileMap.set(it.tibiaId, it));
     }
 
     getSignature(): number { return this.signature; }
@@ -101,19 +112,19 @@ export class DatFile {
     getMissiles(): DatItem[] { return this.missiles; }
 
     getItem(tibiaId: number): DatItem | undefined {
-        return this.items.find(it => it.tibiaId === tibiaId);
+        return this.itemMap.get(tibiaId);
     }
 
     getOutfit(tibiaId: number): DatItem | undefined {
-        return this.outfits.find(it => it.tibiaId === tibiaId);
+        return this.outfitMap.get(tibiaId);
     }
 
     getEffect(tibiaId: number): DatItem | undefined {
-        return this.effects.find(it => it.tibiaId === tibiaId);
+        return this.effectMap.get(tibiaId);
     }
 
     getMissile(tibiaId: number): DatItem | undefined {
-        return this.missiles.find(it => it.tibiaId === tibiaId);
+        return this.missileMap.get(tibiaId);
     }
 
     static loadFromBuffer(buffer: ArrayBuffer, clientVersion: number = 860): DatFile {
@@ -130,7 +141,7 @@ export class DatFile {
         const effectCount = dv.getUint16(offset, true); offset += 2;
         const missileCount = dv.getUint16(offset, true); offset += 2;
 
-        const makeReader = (): ByteReader => ({
+        const _makeReader = (): ByteReader => ({
             getUint8: (o: number) => dv.getUint8(offset + o),
             getUint16: (o: number, le: boolean) => dv.getUint16(offset + o, le),
             getUint32: (o: number, le: boolean) => dv.getUint32(offset + o, le),
