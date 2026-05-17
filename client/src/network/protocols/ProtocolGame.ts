@@ -639,8 +639,7 @@ export class ProtocolGame extends Protocol {
     private setTileDescription(packet: Packet, tileX: number, tileY: number, tileZ: number): { thingCount: number; creatureCount: number; skip: number } {
         let thingCount = 0;
         let creatureCount = 0;
-        let groundId: number | undefined;
-        const itemIds: number[] = [];
+        const things: { type: 'item' | 'creature'; id: number }[] = [];
         let skipCount = 0;
 
         for (let stackPos = 0; stackPos < 256; stackPos++) {
@@ -650,7 +649,7 @@ export class ProtocolGame extends Protocol {
             if (inspect >= 0xFF00) {
                 packet.readUint16();
                 skipCount = inspect & 0x00FF;
-                break; // end of tile, commit what we have
+                break;
             }
 
             const result = this.parseThing(packet);
@@ -668,24 +667,15 @@ export class ProtocolGame extends Protocol {
                             feet: result.feet || 0, addons: result.addons || 0,
                         } : undefined
                     );
+                    things.push({ type: 'creature', id: result.creatureId });
                 }
             } else if (result.tibiaId !== undefined) {
-                if (groundId === undefined) {
-                    groundId = result.tibiaId;
-                } else {
-                    itemIds.push(result.tibiaId);
-                }
+                things.push({ type: 'item', id: result.tibiaId });
             }
         }
 
-        // Only commit a tile if we actually read at least one thing; otherwise the
-        // server signaled an empty tile (peek >= 0xFF00 at stackPos 0) and we must
-        // not pollute the map with placeholder tiles.
         if (thingCount > 0) {
-            g_gameMap.setTile(tileX, tileY, tileZ, {
-                groundId,
-                itemIds: itemIds.length > 0 ? itemIds : undefined,
-            });
+            g_gameMap.setTile(tileX, tileY, tileZ, things);
         }
 
         return { thingCount, creatureCount, skip: skipCount };
